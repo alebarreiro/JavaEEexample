@@ -5,8 +5,17 @@
  */
 package web;
 
+import ejb.NewsEntity;
 import java.io.IOException;
 import java.io.PrintWriter;
+import javax.annotation.Resource;
+import javax.jms.Queue;
+import javax.jms.Connection;
+import javax.jms.JMSException;
+import javax.jms.MessageProducer;
+import javax.jms.ObjectMessage;
+import javax.jms.Session;
+import javax.jms.ConnectionFactory;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
@@ -19,6 +28,11 @@ import javax.servlet.http.HttpServletResponse;
  */
 @WebServlet(name = "PostMessage", urlPatterns = {"/PostMessage"})
 public class PostMessage extends HttpServlet {
+    @Resource(mappedName="jms/NewMessageFactory")
+    private  ConnectionFactory connectionFactory;
+
+    @Resource(mappedName="jms/NewMessage")
+    private  Queue queue;
 
     /**
      * Processes requests for both HTTP <code>GET</code> and <code>POST</code>
@@ -32,6 +46,33 @@ public class PostMessage extends HttpServlet {
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         response.setContentType("text/html;charset=UTF-8");
+        
+        //Code to send the JMS messages:
+        String title=request.getParameter("title");
+        String body=request.getParameter("body");
+        if ((title!=null) && (body!=null)) {
+            try {
+                Connection connection = connectionFactory.createConnection();
+                Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+                MessageProducer messageProducer = session.createProducer(queue);
+
+                ObjectMessage message = session.createObjectMessage();
+                // here we create NewsEntity, that will be sent in JMS message
+                NewsEntity e = new NewsEntity();
+                e.setTitle(title);
+                e.setBody(body);
+
+                message.setObject(e);                
+                messageProducer.send(message);
+                messageProducer.close();
+                connection.close();
+                response.sendRedirect("ListNews");
+
+            } catch (JMSException ex) {
+                ex.printStackTrace();
+            }
+        }
+        
         try (PrintWriter out = response.getWriter()) {
             /* TODO output your page here. You may use following sample code. */
             out.println("<!DOCTYPE html>");
@@ -41,6 +82,14 @@ public class PostMessage extends HttpServlet {
             out.println("</head>");
             out.println("<body>");
             out.println("<h1>Servlet PostMessage at " + request.getContextPath() + "</h1>");
+            
+            // The following code adds the form to the web page
+            out.println("<form>");
+            out.println("Title: <input type='text' name='title'><br/>");
+            out.println("Message: <textarea name='body'></textarea><br/>");
+            out.println("<input type='submit'><br/>");
+            out.println("</form>");
+            
             out.println("</body>");
             out.println("</html>");
         }
